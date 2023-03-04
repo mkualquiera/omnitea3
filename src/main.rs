@@ -9,7 +9,7 @@ use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
 
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, info};
 
 fn setup_logger() -> Result<(), fern::InitError> {
     fern::Dispatch::new()
@@ -24,7 +24,7 @@ fn setup_logger() -> Result<(), fern::InitError> {
         })
         .level(log::LevelFilter::Debug)
         .chain(std::io::stdout())
-        .chain(fern::log_file("output.log")?)
+        //.chain(fern::log_file("output.log")?)
         // remove targets different than the current one
         .filter(|metadata| metadata.target().starts_with(env!("CARGO_PKG_NAME")))
         .apply()?;
@@ -166,6 +166,9 @@ impl EventHandler for Handler {
         debug!("Chat log: {:?}", chat_log);
         info!("Context length: {}", chat_log.count_tokens());
 
+        // Start the "typing" indicator
+        let typing = msg.channel_id.start_typing(&ctx.http);
+
         let completion = chat_log.complete(&self.openai).await;
 
         match completion {
@@ -182,6 +185,16 @@ impl EventHandler for Handler {
             }
             Err(why) => {
                 error!("Error completing chat: {:?}", why);
+            }
+        }
+
+        // Stop the "typing" indicator
+        match typing {
+            Ok(typing) => {
+                let _ = typing.stop();
+            }
+            Err(why) => {
+                error!("Error stopping typing: {:?}", why);
             }
         }
     }

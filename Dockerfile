@@ -7,7 +7,7 @@ COPY . .
 RUN cargo build --release
 
 
-FROM alpine:latest
+FROM rust:latest
 
 WORKDIR /usr/src/omnitea3
 

@@ -94,6 +94,12 @@ impl EventHandler for Handler {
 
         info!("Received message: {}", msg.content);
 
+        // See if the message is a barrier
+        if msg.content == "|barrier|" {
+            info!("Barrier received");
+            return;
+        }
+
         let mut messages_to_include = Vec::new();
         messages_to_include.push(msg.clone());
 
@@ -115,6 +121,11 @@ impl EventHandler for Handler {
 
             // Add them at the start of the vector
             for message in past_messages {
+                // See if the message is a barrier
+                if message.content == "|barrier|" {
+                    debug!("Barrier found, stopping");
+                    break;
+                }
                 messages_to_include.insert(0, message.to_owned());
             }
 

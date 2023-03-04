@@ -9,8 +9,74 @@ use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
 
+use log::{debug, error, info, trace, warn};
+
+fn setup_logger() -> Result<(), fern::InitError> {
+    fern::Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "{}[{}][{}] {}",
+                chrono::Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
+                record.target(),
+                record.level(),
+                message
+            ))
+        })
+        .level(log::LevelFilter::Debug)
+        .chain(std::io::stdout())
+        .chain(fern::log_file("output.log")?)
+        // remove targets different than the current one
+        .filter(|metadata| metadata.target().starts_with(env!("CARGO_PKG_NAME")))
+        .apply()?;
+    Ok(())
+}
+
+// Constant for the maximum number of tokens in a chat log
+const MAX_TOKENS: usize = 4096 - 500;
+
 struct Handler {
     openai: OpenAI,
+}
+
+async fn add_user_message(
+    ctx: Context,
+    chat_log: ChatLog,
+    message: &Message,
+) -> ChatLog {
+    // We may or may not be in a guild, so we need to handle that
+    let user_nickname = match message.guild_id {
+        Some(guild_id) => message
+            .author
+            .nick_in(&ctx.http, guild_id)
+            .await
+            .unwrap_or_else(|| message.author.name.clone()),
+        None => message.author.name.clone(),
+    };
+
+    chat_log.user(&format!("{} says: {}", user_nickname, message.content))
+}
+
+async fn add_message(ctx: Context, chat_log: ChatLog, message: &Message) -> ChatLog {
+    // we need to check if the id of the author is the same as the id of the bot
+    if message.is_own(&ctx.cache) {
+        chat_log.assistant(&message.content)
+    } else {
+        add_user_message(ctx, chat_log, message).await
+    }
+}
+
+async fn build_chat_log(ctx: Context, messages: Vec<Message>) -> ChatLog {
+    let mut chat_log = ChatLog::new();
+
+    let prompt = include_str!("prompt.txt");
+
+    chat_log = chat_log.system(prompt);
+
+    for message in messages {
+        chat_log = add_message(ctx.clone(), chat_log, &message).await;
+    }
+
+    chat_log
 }
 
 #[async_trait]
@@ -26,75 +92,77 @@ impl EventHandler for Handler {
             return;
         }
 
-        let prompt = include_str!("prompt.txt");
+        info!("Received message: {}", msg.content);
 
-        let mut chat_log = ChatLog::new().system(prompt);
+        let mut messages_to_include = Vec::new();
+        messages_to_include.push(msg.clone());
 
-        // Read channel messages to build chat log
-        let mut messages = msg
-            .channel_id
-            .messages(&ctx.http, |retriever| retriever.before(msg.id).limit(10))
-            .await
-            .unwrap();
+        // Add past messages until we go over the limit
+        loop {
+            let past_messages = msg
+                .channel_id
+                .messages(&ctx.http, |retriever| {
+                    retriever
+                        .before(messages_to_include.first().unwrap().id)
+                        .limit(10)
+                })
+                .await
+                .unwrap();
 
-        messages.reverse();
+            if past_messages.is_empty() {
+                break;
+            }
 
-        async fn add_user_message(
-            ctx: Context,
-            chat_log: ChatLog,
-            message: &Message,
-        ) -> ChatLog {
-            // We may or may not be in a guild, so we need to handle that
-            let user_nickname = match message.guild_id {
-                Some(guild_id) => message
-                    .author
-                    .nick_in(&ctx.http, guild_id)
-                    .await
-                    .unwrap_or_else(|| message.author.name.clone()),
-                None => message.author.name.clone(),
-            };
+            // Add them at the start of the vector
+            for message in past_messages {
+                messages_to_include.insert(0, message.to_owned());
+            }
 
-            chat_log.user(&format!("{} says: {}", user_nickname, message.content))
-        }
+            // Count the number of tokens in the chat log
+            let chat_log =
+                build_chat_log(ctx.clone(), messages_to_include.clone()).await;
 
-        async fn add_message(
-            ctx: Context,
-            chat_log: ChatLog,
-            message: &Message,
-        ) -> ChatLog {
-            // we need to check if the id of the author is the same as the id of the bot
-            if message.is_own(&ctx.cache) {
-                chat_log.assistant(&message.content)
-            } else {
-                add_user_message(ctx, chat_log, message).await
+            let tokens = chat_log.count_tokens();
+            if tokens > MAX_TOKENS {
+                break;
             }
         }
 
-        for message in messages {
-            if message.author.bot {
-                chat_log = chat_log.assistant(&message.content);
-            } else {
-                chat_log = add_user_message(ctx.clone(), chat_log, &message).await;
+        // Remove messages until we are under the limit
+        while messages_to_include.len() > 1 {
+            let chat_log =
+                build_chat_log(ctx.clone(), messages_to_include.clone()).await;
+
+            let tokens = chat_log.count_tokens();
+            if tokens <= MAX_TOKENS {
+                break;
             }
+
+            messages_to_include.remove(0);
         }
 
-        // Add user message
-        chat_log = add_user_message(ctx.clone(), chat_log, &msg).await;
+        // Make the completion request
+        let chat_log = build_chat_log(ctx.clone(), messages_to_include.clone()).await;
 
-        println!("{:?}", chat_log);
+        debug!("Chat log: {:?}", chat_log);
+        info!("Context length: {}", chat_log.count_tokens());
 
         let completion = chat_log.complete(&self.openai).await;
 
         match completion {
             Ok(completion) => {
-                if let Err(why) =
-                    msg.channel_id.say(&ctx.http, completion.content).await
+                if let Err(why) = msg
+                    .channel_id
+                    .say(&ctx.http, completion.content.clone())
+                    .await
                 {
-                    println!("Error sending message: {:?}", why);
+                    error!("Error sending message: {:?}", why);
+                } else {
+                    info!("Sent message: {}", completion.content);
                 }
             }
             Err(why) => {
-                println!("Error completing chat: {:?}", why);
+                error!("Error completing chat: {:?}", why);
             }
         }
     }
@@ -112,6 +180,8 @@ impl EventHandler for Handler {
 
 #[tokio::main]
 async fn main() {
+    // Configure logging
+    setup_logger().expect("Failed to setup logging");
     // Configure the client with your Discord bot token in the environment.
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
     let openai_key = env::var("OPENAI_KEY").expect("Expected a key in the environment");

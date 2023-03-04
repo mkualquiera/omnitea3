@@ -1,4 +1,7 @@
+use std::borrow::Borrow;
+
 use serde::{Deserialize, Serialize};
+use tiktoken_rs::tiktoken::cl100k_base_singleton;
 
 /// Roles that can be used in a chat log
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -12,6 +15,17 @@ pub enum ChatRole {
     /// The assistant, used for the assistant's response
     #[serde(rename = "assistant")]
     Assistant,
+}
+
+impl ToString for ChatRole {
+    /// Convert the chat role to a string
+    fn to_string(&self) -> String {
+        match self {
+            ChatRole::System => "system".to_string(),
+            ChatRole::User => "user".to_string(),
+            ChatRole::Assistant => "assistant".to_string(),
+        }
+    }
 }
 
 /// A single entry in a chat log
@@ -30,6 +44,19 @@ struct ChatCompletionRequest {
     model: String,
     /// The chat log
     messages: ChatLog,
+}
+
+impl ChatEntry {
+    /// Count the number of tokens in the entry
+    fn count_tokens(&self) -> usize {
+        let tokenizer = cl100k_base_singleton();
+        let tokenizer = tokenizer.lock();
+
+        let role_tokens = tokenizer.encode_ordinary(self.role.to_string().as_str());
+        let content_tokens = tokenizer.encode_ordinary(self.content.as_str());
+
+        role_tokens.len() + content_tokens.len() + 3
+    }
 }
 
 impl ChatCompletionRequest {
@@ -137,6 +164,11 @@ impl ChatLog {
                 )
             },
         )
+    }
+
+    /// Count the number of tokens in the chat log
+    pub fn count_tokens(&self) -> usize {
+        self.0.iter().map(|entry| entry.count_tokens()).sum()
     }
 }
 

@@ -95,8 +95,13 @@ impl EventHandler for Handler {
         info!("Received message: {}", msg.content);
 
         // See if the message is a barrier
-        if msg.content == "|barrier|" {
+        if msg.content == "|b|" {
             info!("Barrier received");
+
+            // React with a checkmark
+            if let Err(why) = msg.react(&ctx.http, '✅').await {
+                error!("Error reacting: {:?}", why);
+            }
             return;
         }
 
@@ -119,11 +124,14 @@ impl EventHandler for Handler {
                 break;
             }
 
+            let mut found_barrier = false;
+
             // Add them at the start of the vector
             for message in past_messages {
                 // See if the message is a barrier
                 if message.content == "|barrier|" {
                     debug!("Barrier found, stopping");
+                    found_barrier = true;
                     break;
                 }
                 messages_to_include.insert(0, message.to_owned());
@@ -134,7 +142,7 @@ impl EventHandler for Handler {
                 build_chat_log(ctx.clone(), messages_to_include.clone()).await;
 
             let tokens = chat_log.count_tokens();
-            if tokens > MAX_TOKENS {
+            if tokens > MAX_TOKENS || found_barrier {
                 break;
             }
         }

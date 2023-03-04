@@ -129,7 +129,7 @@ impl EventHandler for Handler {
             // Add them at the start of the vector
             for message in past_messages {
                 // See if the message is a barrier
-                if message.content == "|barrier|" {
+                if message.content == "|b|" {
                     debug!("Barrier found, stopping");
                     found_barrier = true;
                     break;

@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-
 use serde::{Deserialize, Serialize};
 use tiktoken_rs::tiktoken::cl100k_base_singleton;
 

@@ -1,15 +1,5 @@
 FROM rust:latest AS builder
 
-WORKDIR /usr/src/cache
-
-RUN cargo init
-
-COPY Cargo.toml ./
-
-RUN cargo fetch
-
-RUN cargo build --release
-
 WORKDIR /usr/src/omnitea3
 
 COPY . .

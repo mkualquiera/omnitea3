@@ -1,4 +1,5 @@
 use std::env;
+use std::fs::File;
 use std::path::Path;
 
 mod openai;
@@ -82,13 +83,16 @@ use std::process::Command;
 /// Takes a string, and renders it as latex to a temporary file and returns the path
 /// to the file. It uses pdflatex to render the latex.
 fn render_latex(latex: &str) -> String {
-    // Create a temporary file
-    let mut file = tempfile::NamedTempFile::new().unwrap();
+    // Create a file with a random name
+    let filenum = rand::random::<u64>().to_string();
+    let name = format!("{}.tex", filenum);
+    // Open the file in the current directory
+    let mut file = File::create(&name).unwrap();
 
     // Write the latex to the file
     writeln!(
         file,
-        r"\documentclass[preview]{{standalone}}
+        r"\documentclass[convert=true]{{standalone}}
 \usepackage{{amsmath}}
 \begin{{document}}
 {}
@@ -100,14 +104,10 @@ fn render_latex(latex: &str) -> String {
     // Flush the file
     file.flush().unwrap();
 
-    // Get the path to the file
-    let path = file.path();
-
     // Run pdflatex on the file, we have to set the cwd to the directory of the file
     let output = Command::new("pdflatex")
         .arg("--shell-escape")
-        .arg(path)
-        .current_dir(path.parent().unwrap())
+        .arg(name)
         .output()
         .expect("failed to execute process");
 
@@ -119,16 +119,8 @@ fn render_latex(latex: &str) -> String {
         );
     }
 
-    // Get the path to the png which will be the same as the tex file but
-    // with a png extension
-    let mut png_path = path.to_path_buf();
-    png_path.set_extension("png");
-
-    // Close the file
-    file.close().unwrap();
-
-    // Return the path to the png
-    png_path.to_str().unwrap().to_string()
+    // Get the path to the png file
+    format!("{}.png", filenum)
 }
 
 struct Handler {

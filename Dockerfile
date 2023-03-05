@@ -8,6 +8,8 @@ COPY Cargo.toml ./
 
 RUN cargo fetch
 
+RUN cargo build --release
+
 COPY . .
 
 RUN cargo build --release

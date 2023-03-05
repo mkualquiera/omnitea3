@@ -2,6 +2,10 @@ FROM rust:latest AS builder
 
 WORKDIR /usr/src/omnitea3
 
+COPY Cargo.toml Cargo.lock ./
+
+RUN cargo fetch
+
 COPY . .
 
 RUN cargo build --release

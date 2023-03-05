@@ -89,9 +89,9 @@ fn render_md(markdown: &str) -> BotResponse {
         .arg("-V")
         .arg("geometry:margin=0.2in")
         .arg("-V")
-        .arg("geometry:paperwidth=5.5in")
+        .arg("geometry:paperwidth=4.25in")
         .arg("-V")
-        .arg("geometry:paperheight=4.25in")
+        .arg("geometry:paperheight=3.25in")
         .arg("--pdf-engine=xelatex")
         .arg("-o")
         .arg(&format!("{}.pdf", filenum))
@@ -126,13 +126,21 @@ fn render_md(markdown: &str) -> BotResponse {
     // Get the current directory
     let path = Path::new(".");
 
+    let entries = path.read_dir().unwrap();
+
+    // Sort the entries by name
+    let mut entries: Vec<_> = entries.collect();
+    entries.sort_by(|a, b| a.as_ref().unwrap().path().cmp(&b.as_ref().unwrap().path()));
+
     // Iterate over all the files in the directory
-    for entry in path.read_dir().unwrap() {
+    for entry in entries.iter() {
         // Get the path of the file
-        let path = entry.unwrap().path();
+        let path = entry.as_ref().unwrap().path();
+
+        let extension = path.extension();
 
         // Check if the file is a png file
-        if path.extension().unwrap() == "png" {
+        if extension.is_some() && path.extension().unwrap() == "png" {
             // Check if the file starts with the filenum
             if path
                 .file_stem()
@@ -196,16 +204,29 @@ async fn build_chat_log(ctx: Context, messages: Vec<Message>) -> ChatLog {
 }
 
 /// Function that sends a message and splits it into multiple messages if it is too long
-async fn send_message(ctx: Context, original_message: Message, message: String) {
+async fn send_message(
+    ctx: Context,
+    original_message: Message,
+    message: String,
+    escape: bool,
+) {
     // Split the message into multiple messages if it is too long
     let chars = message.as_str().chars().collect::<Vec<char>>();
-    // Do chunks of 2000
-    let chunks = chars.chunks(2000);
+    // Do chunks of 2000 - 6 to account for the code block
+    let chunks = chars.chunks(2000 - 6);
 
     // Iterate over the chunks
     for chunk in chunks {
         // Convert the chunk to a string
         let chunk = chunk.iter().collect::<String>();
+
+        // If we need to escape the message
+        let chunk = if escape {
+            // Escape the message
+            format!("```{}```", chunk)
+        } else {
+            chunk
+        };
 
         // Send the message
         if let Err(why) = original_message.channel_id.say(&ctx.http, chunk).await {
@@ -314,7 +335,7 @@ impl EventHandler for Handler {
                 match response {
                     BotResponse::Text(text) => {
                         // Send the response
-                        send_message(ctx, msg, text).await;
+                        send_message(ctx, msg, text, false).await;
                     }
                     BotResponse::Image(path_strs, original_text) => {
                         for path_str in path_strs {
@@ -324,7 +345,6 @@ impl EventHandler for Handler {
                                 .channel_id
                                 .send_message(&ctx.http, |m| {
                                     m.add_file(AttachmentType::Path(path));
-                                    m.content(original_text.clone());
                                     m
                                 })
                                 .await
@@ -333,7 +353,7 @@ impl EventHandler for Handler {
                             }
                         }
 
-                        send_message(ctx, msg, original_text).await;
+                        send_message(ctx, msg, original_text, true).await;
                     }
                 }
             }

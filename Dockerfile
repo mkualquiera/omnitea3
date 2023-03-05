@@ -9,7 +9,7 @@ RUN cargo build --release
 FROM debian:bullseye-slim
 
 RUN apt-get update && \
-    apt-get install -y texlive-base texlive-binaries texlive-latex-extra imagemagick vim
+    apt-get install -y texlive-base texlive-xetex texlive-latex-extra imagemagick vim
 
 COPY policy.xml /etc/ImageMagick-6/policy.xml
 

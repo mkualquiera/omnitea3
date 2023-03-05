@@ -105,7 +105,7 @@ fn render_latex(latex: &str) -> String {
     file.flush().unwrap();
 
     // Run pdflatex on the file, we have to set the cwd to the directory of the file
-    let output = Command::new("pdflatex")
+    let output = Command::new("xelatex")
         .arg("--shell-escape")
         .arg(name)
         .output()

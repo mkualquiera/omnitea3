@@ -6,7 +6,7 @@ COPY . .
 
 RUN cargo build --release
 
-FROM rust:latest
+FROM debian:bullseye-slim
 
 RUN apt-get update && \
     apt-get install -y texlive-base texlive-binaries texlive-latex-extra imagemagick vim

@@ -41,8 +41,8 @@ const MAX_TOKENS: usize = 4096 - 500;
 enum BotResponse {
     /// The text of the chunk
     Text(String),
-    /// A path to the image
-    Image(String),
+    /// The paths of the images
+    Image(Vec<String>, String),
 }
 
 use regex::Regex;
@@ -54,10 +54,8 @@ fn parse_response(response: String) -> BotResponse {
 
     // See if there is at least one match
     if re.is_match(&response) {
-        // Render it
-        let path = render_latex(&response);
-        // Return the image
-        BotResponse::Image(path)
+        // Return the images
+        render_md(&response)
     } else {
         // Return the text
         BotResponse::Text(response)
@@ -69,8 +67,8 @@ use std::process::Command;
 
 /// Takes a string, and renders it as markdown to a temporary file and returns the path
 /// to the file. It uses pandoc to render the markdown, and then imagemagick to convert
-/// the pdf to a png.
-fn render_latex(markdown: &str) -> String {
+/// the pdf to a png. There may be many files as output, so it returns a vector of paths.
+fn render_md(markdown: &str) -> BotResponse {
     // Create a file with a random name
     let filenum = rand::random::<u64>().to_string();
     let name = format!("{}.md", filenum);
@@ -88,6 +86,12 @@ fn render_latex(markdown: &str) -> String {
 
     // Run pandoc to convert the markdown to a pdf
     let output = Command::new("pandoc")
+        .arg("-V")
+        .arg("geometry:margin=0.2in")
+        .arg("-V")
+        .arg("geometry:paperwidth=5.5in")
+        .arg("-V")
+        .arg("geometry:paperheight=4.25in")
         .arg("--pdf-engine=xelatex")
         .arg("-o")
         .arg(&format!("{}.pdf", filenum))
@@ -116,8 +120,34 @@ fn render_latex(markdown: &str) -> String {
         .output()
         .expect("failed to execute convert");
 
-    // Get the path to the png file
-    format!("{}.png", filenum)
+    // Get all the png files that were created. They are named {filenum}-{number}.png
+    let mut paths = Vec::new();
+
+    // Get the current directory
+    let path = Path::new(".");
+
+    // Iterate over all the files in the directory
+    for entry in path.read_dir().unwrap() {
+        // Get the path of the file
+        let path = entry.unwrap().path();
+
+        // Check if the file is a png file
+        if path.extension().unwrap() == "png" {
+            // Check if the file starts with the filenum
+            if path
+                .file_stem()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with(&filenum)
+            {
+                // Add the path to the vector
+                paths.push(path.to_str().unwrap().to_string());
+            }
+        }
+    }
+
+    BotResponse::Image(paths, markdown.to_string())
 }
 
 struct Handler {
@@ -163,6 +193,25 @@ async fn build_chat_log(ctx: Context, messages: Vec<Message>) -> ChatLog {
     }
 
     chat_log
+}
+
+/// Function that sends a message and splits it into multiple messages if it is too long
+async fn send_message(ctx: Context, original_message: Message, message: String) {
+    // Split the message into multiple messages if it is too long
+    let chars = message.as_str().chars().collect::<Vec<char>>();
+    // Do chunks of 2000
+    let chunks = chars.chunks(2000);
+
+    // Iterate over the chunks
+    for chunk in chunks {
+        // Convert the chunk to a string
+        let chunk = chunk.iter().collect::<String>();
+
+        // Send the message
+        if let Err(why) = original_message.channel_id.say(&ctx.http, chunk).await {
+            error!("Error sending message: {:?}", why);
+        }
+    }
 }
 
 #[async_trait]
@@ -265,23 +314,26 @@ impl EventHandler for Handler {
                 match response {
                     BotResponse::Text(text) => {
                         // Send the response
-                        if let Err(why) = msg.channel_id.say(&ctx.http, text).await {
-                            error!("Error sending message: {:?}", why);
-                        }
+                        send_message(ctx, msg, text).await;
                     }
-                    BotResponse::Image(path_str) => {
-                        let path = Path::new(&path_str);
-
-                        // Send the response
-                        if let Err(why) = msg
-                            .channel_id
-                            .send_message(&ctx.http, |m| {
-                                m.add_file(AttachmentType::Path(path))
-                            })
-                            .await
-                        {
-                            error!("Error sending message: {:?}", why);
+                    BotResponse::Image(path_strs, original_text) => {
+                        for path_str in path_strs {
+                            let path = Path::new(&path_str);
+                            // Send as an attachment
+                            if let Err(why) = msg
+                                .channel_id
+                                .send_message(&ctx.http, |m| {
+                                    m.add_file(AttachmentType::Path(path));
+                                    m.content(original_text.clone());
+                                    m
+                                })
+                                .await
+                            {
+                                error!("Error sending message: {:?}", why);
+                            }
                         }
+
+                        send_message(ctx, msg, original_text).await;
                     }
                 }
             }

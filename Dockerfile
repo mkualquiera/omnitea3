@@ -2,7 +2,7 @@ FROM rust:latest AS builder
 
 WORKDIR /usr/src/omnitea3
 
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml ./
 
 RUN cargo fetch
 

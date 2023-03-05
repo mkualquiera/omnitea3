@@ -2,6 +2,8 @@ FROM rust:latest AS builder
 
 WORKDIR /usr/src/omnitea3
 
+RUN cargo init
+
 COPY Cargo.toml ./
 
 RUN cargo fetch

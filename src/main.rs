@@ -74,7 +74,34 @@ fn chunk_response(response: String) -> Vec<BotResponseChunk> {
         }
     }
 
-    chunks
+    merge_chunks(chunks)
+}
+
+/// Efficiently merge neighboring text chunks into one
+fn merge_chunks(chunks: Vec<BotResponseChunk>) -> Vec<BotResponseChunk> {
+    let mut merged_chunks = Vec::new();
+
+    for chunk in chunks {
+        match chunk {
+            BotResponseChunk::Text(text) => {
+                // If the last chunk is a text chunk, merge the two
+                if let Some(BotResponseChunk::Text(last_text)) =
+                    merged_chunks.last_mut()
+                {
+                    last_text.push_str(format!("\n{}", text).as_str());
+                } else {
+                    // Otherwise, just add the chunk
+                    merged_chunks.push(BotResponseChunk::Text(text));
+                }
+            }
+            BotResponseChunk::Image(path) => {
+                // If the last chunk is an image chunk, simply add the chunk
+                merged_chunks.push(BotResponseChunk::Image(path));
+            }
+        }
+    }
+
+    merged_chunks
 }
 
 use std::io::Write;

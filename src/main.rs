@@ -38,7 +38,7 @@ fn setup_logger() -> Result<(), fern::InitError> {
 const MAX_TOKENS: usize = 4096 - 500;
 
 /// A part of the bot response, which can be text or an image
-enum BotResponseChunk {
+enum BotResponse {
     /// The text of the chunk
     Text(String),
     /// A path to the image
@@ -47,104 +47,74 @@ enum BotResponseChunk {
 
 use regex::Regex;
 
-/// Take a response message and turn it into chunks
-fn chunk_response(response: String) -> Vec<BotResponseChunk> {
-    let mut chunks = Vec::new();
-
-    // First, split the response into lines
-    let lines = response.lines();
-
+/// Take a response message and turn it into a parsed response
+fn parse_response(response: String) -> BotResponse {
     // Check which lines contain \$([^$]+)\$
     let re = Regex::new(r"\$([^$]+)\$").unwrap();
 
-    for line in lines {
-        // Check if the line contains a math expression
-        if re.is_match(line) {
-            // Render it as latex
-            let path = render_latex(line);
-            // Add the image as a chunk
-            chunks.push(BotResponseChunk::Image(path));
-        } else {
-            // If the line is empty, skip it
-            if line.is_empty() {
-                continue;
-            }
-            // Add the line as a text chunk
-            chunks.push(BotResponseChunk::Text(line.to_string()));
-        }
+    // See if there is at least one match
+    if re.is_match(&response) {
+        // Render it
+        let path = render_latex(&response);
+        // Return the image
+        BotResponse::Image(path)
+    } else {
+        // Return the text
+        BotResponse::Text(response)
     }
-
-    merge_chunks(chunks)
-}
-
-/// Efficiently merge neighboring text chunks into one
-fn merge_chunks(chunks: Vec<BotResponseChunk>) -> Vec<BotResponseChunk> {
-    let mut merged_chunks = Vec::new();
-
-    for chunk in chunks {
-        match chunk {
-            BotResponseChunk::Text(text) => {
-                // If the last chunk is a text chunk, merge the two
-                if let Some(BotResponseChunk::Text(last_text)) =
-                    merged_chunks.last_mut()
-                {
-                    last_text.push_str(format!("\n{}", text).as_str());
-                } else {
-                    // Otherwise, just add the chunk
-                    merged_chunks.push(BotResponseChunk::Text(text));
-                }
-            }
-            BotResponseChunk::Image(path) => {
-                // If the last chunk is an image chunk, simply add the chunk
-                merged_chunks.push(BotResponseChunk::Image(path));
-            }
-        }
-    }
-
-    merged_chunks
 }
 
 use std::io::Write;
 use std::process::Command;
 
-/// Takes a string, and renders it as latex to a temporary file and returns the path
-/// to the file. It uses pdflatex to render the latex.
-fn render_latex(latex: &str) -> String {
+/// Takes a string, and renders it as markdown to a temporary file and returns the path
+/// to the file. It uses pandoc to render the markdown, and then imagemagick to convert
+/// the pdf to a png.
+fn render_latex(markdown: &str) -> String {
     // Create a file with a random name
     let filenum = rand::random::<u64>().to_string();
-    let name = format!("{}.tex", filenum);
+    let name = format!("{}.md", filenum);
     // Open the file in the current directory
     let mut file = File::create(&name).unwrap();
 
-    // Write the latex to the file
-    writeln!(
-        file,
-        r"\documentclass[convert=true]{{standalone}}
-\usepackage{{amsmath}}
-\begin{{document}}
-{}
-\end{{document}}",
-        latex
-    )
-    .unwrap();
+    // Write \pagenumbering{gobble}\n to the file
+    file.write_all(b"\\pagenumbering{gobble}\n").unwrap();
+
+    // Write the markdown to the file
+    file.write_all(markdown.as_bytes()).unwrap();
 
     // Flush the file
     file.flush().unwrap();
 
-    // Run pdflatex on the file, we have to set the cwd to the directory of the file
-    let output = Command::new("xelatex")
-        .arg("--shell-escape")
-        .arg(name)
+    // Run pandoc to convert the markdown to a pdf
+    let output = Command::new("pandoc")
+        .arg("--pdf-engine=xelatex")
+        .arg("-o")
+        .arg(&format!("{}.pdf", filenum))
+        .arg(&name)
         .output()
-        .expect("failed to execute process");
+        .expect("failed to execute pandoc");
 
     // Check if the command failed
     if !output.status.success() {
-        panic!(
-            "pdflatex failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+        // Print the error
+        println!("pandoc failed: {}", String::from_utf8_lossy(&output.stderr));
     }
+
+    // Run imagemagick to convert the pdf to a png
+    Command::new("convert")
+        .arg("-trim")
+        .arg("-density")
+        .arg("300")
+        .arg("-channel")
+        .arg("RGB")
+        .arg("-negate")
+        .arg("+channel")
+        .arg("RGB")
+        .arg(&format!("{}.pdf", filenum))
+        .arg(&format!("{}.png", filenum))
+        .output()
+        .expect("failed to execute convert");
 
     // Get the path to the png file
     format!("{}.png", filenum)
@@ -289,28 +259,28 @@ impl EventHandler for Handler {
 
         match completion {
             Ok(completion) => {
-                // Turn the completion into chunks
-                let chunks = chunk_response(completion.content);
-                for chunk in chunks {
-                    // Send the chunk
-                    match chunk {
-                        BotResponseChunk::Text(text) => {
-                            if let Err(why) = msg.channel_id.say(&ctx.http, text).await
-                            {
-                                error!("Error sending message: {:?}", why);
-                            }
+                // Parse the completion
+                let response = parse_response(completion.content);
+
+                match response {
+                    BotResponse::Text(text) => {
+                        // Send the response
+                        if let Err(why) = msg.channel_id.say(&ctx.http, text).await {
+                            error!("Error sending message: {:?}", why);
                         }
-                        BotResponseChunk::Image(image_path_str) => {
-                            let image_path = Path::new(&image_path_str);
-                            if let Err(why) = msg
-                                .channel_id
-                                .send_message(&ctx.http, |m| {
-                                    m.add_file(AttachmentType::Path(image_path))
-                                })
-                                .await
-                            {
-                                error!("Error sending message: {:?}", why);
-                            }
+                    }
+                    BotResponse::Image(path_str) => {
+                        let path = Path::new(&path_str);
+
+                        // Send the response
+                        if let Err(why) = msg
+                            .channel_id
+                            .send_message(&ctx.http, |m| {
+                                m.add_file(AttachmentType::Path(path))
+                            })
+                            .await
+                        {
+                            error!("Error sending message: {:?}", why);
                         }
                     }
                 }

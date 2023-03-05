@@ -1,4 +1,5 @@
 use std::env;
+use std::path::Path;
 
 mod openai;
 
@@ -7,6 +8,7 @@ use openai::{ChatLog, OpenAI};
 use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
+use serenity::model::prelude::AttachmentType;
 use serenity::prelude::*;
 
 use log::{debug, error, info};
@@ -33,6 +35,101 @@ fn setup_logger() -> Result<(), fern::InitError> {
 
 // Constant for the maximum number of tokens in a chat log
 const MAX_TOKENS: usize = 4096 - 500;
+
+/// A part of the bot response, which can be text or an image
+enum BotResponseChunk {
+    /// The text of the chunk
+    Text(String),
+    /// A path to the image
+    Image(String),
+}
+
+use regex::Regex;
+
+/// Take a response message and turn it into chunks
+fn chunk_response(response: String) -> Vec<BotResponseChunk> {
+    let mut chunks = Vec::new();
+
+    // First, split the response into lines
+    let lines = response.lines();
+
+    // Check which lines contain \$([^$]+)\$
+    let re = Regex::new(r"\$([^$]+)\$").unwrap();
+
+    for line in lines {
+        // Check if the line contains a math expression
+        if re.is_match(line) {
+            // Render it as latex
+            let path = render_latex(line);
+            // Add the image as a chunk
+            chunks.push(BotResponseChunk::Image(path));
+        } else {
+            // If the line is empty, skip it
+            if line.is_empty() {
+                continue;
+            }
+            // Add the line as a text chunk
+            chunks.push(BotResponseChunk::Text(line.to_string()));
+        }
+    }
+
+    chunks
+}
+
+use std::io::Write;
+use std::process::Command;
+
+/// Takes a string, and renders it as latex to a temporary file and returns the path
+/// to the file. It uses pdflatex to render the latex.
+fn render_latex(latex: &str) -> String {
+    // Create a temporary file
+    let mut file = tempfile::NamedTempFile::new().unwrap();
+
+    // Write the latex to the file
+    writeln!(
+        file,
+        r"\documentclass[preview]{{standalone}}
+\usepackage{{amsmath}}
+\begin{{document}}
+{}
+\end{{document}}",
+        latex
+    )
+    .unwrap();
+
+    // Flush the file
+    file.flush().unwrap();
+
+    // Get the path to the file
+    let path = file.path();
+
+    // Run pdflatex on the file, we have to set the cwd to the directory of the file
+    let output = Command::new("pdflatex")
+        .arg("--shell-escape")
+        .arg(path)
+        .current_dir(path.parent().unwrap())
+        .output()
+        .expect("failed to execute process");
+
+    // Check if the command failed
+    if !output.status.success() {
+        panic!(
+            "pdflatex failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    // Get the path to the png which will be the same as the tex file but
+    // with a png extension
+    let mut png_path = path.to_path_buf();
+    png_path.set_extension("png");
+
+    // Close the file
+    file.close().unwrap();
+
+    // Return the path to the png
+    png_path.to_str().unwrap().to_string()
+}
 
 struct Handler {
     openai: OpenAI,
@@ -173,14 +270,30 @@ impl EventHandler for Handler {
 
         match completion {
             Ok(completion) => {
-                if let Err(why) = msg
-                    .channel_id
-                    .say(&ctx.http, completion.content.clone())
-                    .await
-                {
-                    error!("Error sending message: {:?}", why);
-                } else {
-                    info!("Sent message: {}", completion.content);
+                // Turn the completion into chunks
+                let chunks = chunk_response(completion.content);
+                for chunk in chunks {
+                    // Send the chunk
+                    match chunk {
+                        BotResponseChunk::Text(text) => {
+                            if let Err(why) = msg.channel_id.say(&ctx.http, text).await
+                            {
+                                error!("Error sending message: {:?}", why);
+                            }
+                        }
+                        BotResponseChunk::Image(image_path_str) => {
+                            let image_path = Path::new(&image_path_str);
+                            if let Err(why) = msg
+                                .channel_id
+                                .send_message(&ctx.http, |m| {
+                                    m.add_file(AttachmentType::Path(image_path))
+                                })
+                                .await
+                            {
+                                error!("Error sending message: {:?}", why);
+                            }
+                        }
+                    }
                 }
             }
             Err(why) => {

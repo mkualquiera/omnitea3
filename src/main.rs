@@ -84,7 +84,7 @@ fn render_md(markdown: &str) -> BotResponse {
     file.write_all(b"\\pagenumbering{gobble}\n").unwrap();
 
     // Write the markdown to the file
-    file.write_all(markdown.as_bytes()).unwrap();
+    file.write_all(fixed_markdown.as_bytes()).unwrap();
 
     // Flush the file
     file.flush().unwrap();

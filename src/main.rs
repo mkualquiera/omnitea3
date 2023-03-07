@@ -1,3 +1,5 @@
+#![deny(clippy::pedantic)]
+
 use std::env;
 use std::fs::File;
 use std::path::Path;
@@ -23,7 +25,7 @@ fn setup_logger() -> Result<(), fern::InitError> {
                 record.target(),
                 record.level(),
                 message
-            ))
+            ));
         })
         .level(log::LevelFilter::Debug)
         .chain(std::io::stdout())
@@ -71,12 +73,9 @@ use std::process::Command;
 fn render_md(markdown: &str) -> BotResponse {
     let mut fixed_markdown = markdown.to_string();
 
-    // Replace all the $$ with $
-    fixed_markdown = fixed_markdown.replace("$$", "$");
-
     // Create a file with a random name
     let filenum = rand::random::<u64>().to_string();
-    let name = format!("{}.md", filenum);
+    let name = format!("{filenum}.md");
     // Open the file in the current directory
     let mut file = File::create(&name).unwrap();
 
@@ -99,7 +98,7 @@ fn render_md(markdown: &str) -> BotResponse {
         .arg("geometry:paperheight=3.25in")
         .arg("--pdf-engine=xelatex")
         .arg("-o")
-        .arg(&format!("{}.pdf", filenum))
+        .arg(&format!("{filenum}.pdf"))
         .arg(&name)
         .output()
         .expect("failed to execute pandoc");
@@ -120,8 +119,8 @@ fn render_md(markdown: &str) -> BotResponse {
         .arg("-negate")
         .arg("+channel")
         .arg("RGB")
-        .arg(&format!("{}.pdf", filenum))
-        .arg(&format!("{}.png", filenum))
+        .arg(&format!("{filenum}.pdf"))
+        .arg(&format!("{filenum}.png"))
         .output()
         .expect("failed to execute convert");
 
@@ -135,10 +134,10 @@ fn render_md(markdown: &str) -> BotResponse {
 
     // Sort the entries by name
     let mut entries: Vec<_> = entries.collect();
-    entries.sort_by(|a, b| a.as_ref().unwrap().path().cmp(&b.as_ref().unwrap().path()));
+    entries.sort_by_key(|a| a.as_ref().unwrap().path());
 
     // Iterate over all the files in the directory
-    for entry in entries.iter() {
+    for entry in &entries {
         // Get the path of the file
         let path = entry.as_ref().unwrap().path();
 
@@ -228,7 +227,7 @@ async fn send_message(
         // If we need to escape the message
         let chunk = if escape {
             // Escape the message
-            format!("```{}```", chunk)
+            format!("```{chunk}```")
         } else {
             chunk
         };
@@ -295,7 +294,7 @@ impl EventHandler for Handler {
                     found_barrier = true;
                     break;
                 }
-                messages_to_include.insert(0, message.to_owned());
+                messages_to_include.insert(0, message.clone());
             }
 
             // Count the number of tokens in the chat log
@@ -416,6 +415,6 @@ async fn main() {
     // Shards will automatically attempt to reconnect, and will perform
     // exponential backoff until it reconnects.
     if let Err(why) = client.start().await {
-        println!("Client error: {:?}", why);
+        println!("Client error: {why:?}");
     }
 }

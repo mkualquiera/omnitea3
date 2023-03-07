@@ -113,7 +113,7 @@ pub struct ChatCompletionResponse {
     pub usage: CompletionUsage,
 }
 
-/// OpenAI api clients
+/// `OpenAI` api clients
 pub struct OpenAI {
     /// HTTP client
     client: reqwest::Client,
@@ -166,12 +166,12 @@ impl ChatLog {
 
     /// Count the number of tokens in the chat log
     pub fn count_tokens(&self) -> usize {
-        self.0.iter().map(|entry| entry.count_tokens()).sum()
+        self.0.iter().map(ChatEntry::count_tokens).sum()
     }
 }
 
 impl OpenAI {
-    /// Create a new OpenAI client
+    /// Create a new `OpenAI` client
     pub fn new(api_key: String) -> OpenAI {
         OpenAI {
             client: reqwest::Client::new(),

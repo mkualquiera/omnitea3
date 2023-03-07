@@ -71,7 +71,7 @@ use std::process::Command;
 /// to the file. It uses pandoc to render the markdown, and then imagemagick to convert
 /// the pdf to a png. There may be many files as output, so it returns a vector of paths.
 fn render_md(markdown: &str) -> BotResponse {
-    let mut fixed_markdown = markdown.to_string();
+    let fixed_markdown = markdown.to_string();
 
     // Create a file with a random name
     let filenum = rand::random::<u64>().to_string();

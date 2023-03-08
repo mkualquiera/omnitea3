@@ -27,7 +27,7 @@ impl ToString for ChatRole {
 }
 
 /// A single entry in a chat log
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ChatEntry {
     /// The role of the entry
     pub role: ChatRole,
@@ -75,8 +75,26 @@ impl From<ChatLog> for ChatCompletionRequest {
 }
 
 /// A chat log, which is a list of chat entries
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct ChatLog(Vec<ChatEntry>);
+
+impl core::fmt::Debug for ChatEntry {
+    /// Debug implementation for chat entry
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}] {}", self.role.to_string(), self.content)
+    }
+}
+
+impl core::fmt::Debug for ChatLog {
+    /// Debug implementation for chat log
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let _ = writeln!(f, "== Chat Log Start ==");
+        for entry in &self.0 {
+            let _ = writeln!(f, "{entry:?}");
+        }
+        writeln!(f, "== Chat Log End ==")
+    }
+}
 
 /// Chat completion choice
 #[derive(Serialize, Deserialize, Debug)]

@@ -1,10 +1,23 @@
 FROM rust:latest AS builder
 
+WORKDIR /usr/src
+
+# Create blank project
+RUN USER=root cargo new omnitea3
+
+# We want dependencies cached, so copy those first.
+COPY Cargo.toml /usr/src/omnitea3/
+
 WORKDIR /usr/src/omnitea3
 
-COPY . .
-
+# This is a dummy build to get the dependencies cached.
 RUN cargo build --release
+
+# Now copy in the rest of the sources
+COPY src /usr/src/omnitea3/src/
+
+# This is the actual build.
+RUN cargo build --release 
 
 FROM debian:bullseye-slim
 

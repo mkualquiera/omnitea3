@@ -13,6 +13,8 @@ WORKDIR /usr/src/omnitea3
 # This is a dummy build to get the dependencies cached.
 RUN cargo build --release
 
+RUN rm -rf src
+
 # Now copy in the rest of the sources
 COPY src /usr/src/omnitea3/src/
 

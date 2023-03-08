@@ -14,6 +14,7 @@ WORKDIR /usr/src/omnitea3
 RUN cargo build --release
 
 RUN rm -rf src
+RUN rm -rf target/release/deps/omnitea3*
 
 # Now copy in the rest of the sources
 COPY src /usr/src/omnitea3/src/

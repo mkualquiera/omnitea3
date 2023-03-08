@@ -330,6 +330,7 @@ impl EventHandler for Handler {
         let typing = msg.channel_id.start_typing(&ctx.http);
 
         let completion = chat_log.complete(&self.openai).await;
+        debug!("Completion: {:?}", completion);
 
         match completion {
             Ok(completion) => {

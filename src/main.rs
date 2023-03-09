@@ -199,8 +199,8 @@ async fn build_chat_log(ctx: Context, messages: Vec<Message>) -> ChatLog {
     let prompt = include_str!("prompt.txt");
 
     for (i, message) in messages.clone().into_iter().enumerate() {
-        // See if this is the last message
-        if i == messages.len() - 1 {
+        // See if this is the fourth to last message, or if there are less than 4 messages
+        if i == messages.len() - 4 || messages.len() < 4 {
             // If it is, we need to add the user message
             chat_log = chat_log.system(prompt);
         }

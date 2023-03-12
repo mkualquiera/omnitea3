@@ -259,6 +259,11 @@ impl EventHandler for Handler {
 
         info!("Channel id: {:?}", msg.channel_id);
 
+        info!(
+            "Channel id: {:?}",
+            msg.channel_id.to_channel_cached(&ctx.cache).await
+        );
+
         info!("Channel name: {:?}", msg.channel_id.name(&ctx.cache).await);
 
         if !(msg.is_private()

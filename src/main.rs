@@ -11,7 +11,7 @@ use openai::{ChatLog, OpenAI};
 use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
-use serenity::model::prelude::AttachmentType;
+use serenity::model::prelude::{AttachmentType, Channel};
 use serenity::prelude::*;
 
 use log::{debug, error, info};
@@ -256,18 +256,18 @@ impl EventHandler for Handler {
         }
 
         // The message has to either be in a channel called "omnitea" or in a DM
-        let channel_id = msg.channel_id;
-        let channel = channel_id.to_channel(&ctx).await.unwrap();
-        info!("Channel: {:?}", channel);
-
-        if !(msg.is_private()
-            || msg.channel_id.name(&ctx.cache).await.unwrap() == "omnitea")
-        {
-            return;
+        let channel = msg.channel_id.to_channel(&ctx).await.unwrap();
+        match channel {
+            Channel::Guild(channel) => {
+                if channel.name != "omnitea" {
+                    return;
+                }
+            }
+            Channel::Private(_) => {}
+            _ => return,
         }
 
         info!("Received message: {}", msg.content);
-
         // See if the message is a barrier
         if msg.content == "|b|" {
             info!("Barrier received");

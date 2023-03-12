@@ -259,10 +259,7 @@ impl EventHandler for Handler {
 
         info!("Channel id: {:?}", msg.channel_id);
 
-        info!(
-            "Channel name: {}",
-            msg.channel_id.name(&ctx.cache).await.unwrap()
-        );
+        info!("Channel name: {:?}", msg.channel_id.name(&ctx.cache).await);
 
         if !(msg.is_private()
             || msg.channel_id.name(&ctx.cache).await.unwrap() == "omnitea")

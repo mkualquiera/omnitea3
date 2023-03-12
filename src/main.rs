@@ -261,7 +261,7 @@ impl EventHandler for Handler {
 
         info!(
             "Channel id: {:?}",
-            msg.channel_id.to_channel_cached(&ctx.cache).await
+            msg.channel_id.to_channel_cached(&ctx.cache)
         );
 
         info!("Channel name: {:?}", msg.channel_id.name(&ctx.cache).await);

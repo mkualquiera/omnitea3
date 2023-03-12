@@ -251,7 +251,14 @@ impl EventHandler for Handler {
     // events can be dispatched simultaneously.
     async fn message(&self, ctx: Context, msg: Message) {
         // Ignore messages from self
-        if msg.author.bot {
+        if msg.is_own(&ctx.cache) {
+            return;
+        }
+
+        // The message has to either be in a channel called "omnitea" or in a DM
+        if !(msg.is_private()
+            || msg.channel_id.name(&ctx.cache).await.unwrap() == "omnitea")
+        {
             return;
         }
 

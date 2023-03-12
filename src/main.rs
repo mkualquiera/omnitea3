@@ -257,6 +257,8 @@ impl EventHandler for Handler {
 
         // The message has to either be in a channel called "omnitea" or in a DM
 
+        info!("Channel id: {:?}", msg.channel_id);
+
         info!(
             "Channel name: {}",
             msg.channel_id.name(&ctx.cache).await.unwrap()

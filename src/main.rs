@@ -256,15 +256,9 @@ impl EventHandler for Handler {
         }
 
         // The message has to either be in a channel called "omnitea" or in a DM
-
-        info!("Channel id: {:?}", msg.channel_id);
-
-        info!(
-            "Channel id: {:?}",
-            msg.channel_id.to_channel_cached(&ctx.cache)
-        );
-
-        info!("Channel name: {:?}", msg.channel_id.name(&ctx.cache).await);
+        let channel_id = msg.channel_id;
+        let channel = channel_id.to_channel(&ctx).await.unwrap();
+        info!("Channel: {:?}", channel);
 
         if !(msg.is_private()
             || msg.channel_id.name(&ctx.cache).await.unwrap() == "omnitea")

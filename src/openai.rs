@@ -70,8 +70,8 @@ impl ChatCompletionRequest {
 impl From<ChatLog> for ChatCompletionRequest {
     /// Create a new chat completion request from a chat log
     fn from(log: ChatLog) -> ChatCompletionRequest {
-        //ChatCompletionRequest::new("gpt-3.5-turbo", log)
-        ChatCompletionRequest::new("gpt-4", log)
+        ChatCompletionRequest::new("gpt-3.5-turbo", log)
+        //ChatCompletionRequest::new("gpt-4", log)
     }
 }
 

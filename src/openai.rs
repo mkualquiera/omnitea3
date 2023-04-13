@@ -70,7 +70,10 @@ impl ChatCompletionRequest {
 impl From<ChatLog> for ChatCompletionRequest {
     /// Create a new chat completion request from a chat log
     fn from(log: ChatLog) -> ChatCompletionRequest {
-        ChatCompletionRequest::new("gpt-3.5-turbo", log)
+        // Get model name from environment variable
+        let model = std::env::var("OPENAI_MODEL")
+            .unwrap_or_else(|_| "gpt-3.5-turbo".to_string());
+        ChatCompletionRequest::new(&model, log)
         //ChatCompletionRequest::new("gpt-4", log)
     }
 }

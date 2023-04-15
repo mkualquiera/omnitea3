@@ -242,6 +242,63 @@ async fn send_message(
     }
 }
 
+async fn fetch_included_messages(ctx: Context, msg: Message) -> Vec<Message> {
+    let mut messages_to_include = Vec::new();
+    messages_to_include.push(msg.clone());
+
+    // Add past messages until we go over the limit
+    loop {
+        let past_messages = msg
+            .channel_id
+            .messages(&ctx.http, |retriever| {
+                retriever
+                    .before(messages_to_include.first().unwrap().id)
+                    .limit(10)
+            })
+            .await
+            .unwrap();
+
+        if past_messages.is_empty() {
+            break;
+        }
+
+        let mut found_barrier = false;
+
+        // Add them at the start of the vector
+        for message in past_messages {
+            // See if the message is a barrier
+            if message.content == "|b|" {
+                debug!("Barrier found, stopping");
+                found_barrier = true;
+                break;
+            }
+            messages_to_include.insert(0, message.clone());
+        }
+
+        // Count the number of tokens in the chat log
+        let chat_log = build_chat_log(ctx.clone(), messages_to_include.clone()).await;
+
+        let tokens = chat_log.count_tokens();
+        if tokens > MAX_TOKENS || found_barrier {
+            break;
+        }
+    }
+
+    // Remove messages until we are under the limit
+    while messages_to_include.len() > 1 {
+        let chat_log = build_chat_log(ctx.clone(), messages_to_include.clone()).await;
+
+        let tokens = chat_log.count_tokens();
+        if tokens <= MAX_TOKENS {
+            break;
+        }
+
+        messages_to_include.remove(0);
+    }
+
+    messages_to_include
+}
+
 #[async_trait]
 impl EventHandler for Handler {
     // Set a handler for the `message` event - so that whenever a new message
@@ -257,9 +314,14 @@ impl EventHandler for Handler {
 
         // The message has to either be in a channel called "omnitea" or in a DM
         let channel = msg.channel_id.to_channel(&ctx).await.unwrap();
+
+        // Get channel name from environment variable
+        let target_channel =
+            env::var("CHANNEL_NAME").unwrap_or_else(|_| "omnitea".to_string());
+
         match channel {
             Channel::Guild(channel) => {
-                if channel.name != "omnitea" {
+                if channel.name != target_channel {
                     return;
                 }
             }
@@ -279,60 +341,9 @@ impl EventHandler for Handler {
             return;
         }
 
-        let mut messages_to_include = Vec::new();
-        messages_to_include.push(msg.clone());
-
-        // Add past messages until we go over the limit
-        loop {
-            let past_messages = msg
-                .channel_id
-                .messages(&ctx.http, |retriever| {
-                    retriever
-                        .before(messages_to_include.first().unwrap().id)
-                        .limit(10)
-                })
-                .await
-                .unwrap();
-
-            if past_messages.is_empty() {
-                break;
-            }
-
-            let mut found_barrier = false;
-
-            // Add them at the start of the vector
-            for message in past_messages {
-                // See if the message is a barrier
-                if message.content == "|b|" {
-                    debug!("Barrier found, stopping");
-                    found_barrier = true;
-                    break;
-                }
-                messages_to_include.insert(0, message.clone());
-            }
-
-            // Count the number of tokens in the chat log
-            let chat_log =
-                build_chat_log(ctx.clone(), messages_to_include.clone()).await;
-
-            let tokens = chat_log.count_tokens();
-            if tokens > MAX_TOKENS || found_barrier {
-                break;
-            }
-        }
-
-        // Remove messages until we are under the limit
-        while messages_to_include.len() > 1 {
-            let chat_log =
-                build_chat_log(ctx.clone(), messages_to_include.clone()).await;
-
-            let tokens = chat_log.count_tokens();
-            if tokens <= MAX_TOKENS {
-                break;
-            }
-
-            messages_to_include.remove(0);
-        }
+        // Get the messages to include
+        let messages_to_include =
+            fetch_included_messages(ctx.clone(), msg.clone()).await;
 
         // Make the completion request
         let chat_log = build_chat_log(ctx.clone(), messages_to_include.clone()).await;

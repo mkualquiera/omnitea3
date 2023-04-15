@@ -259,9 +259,9 @@ impl EventHandler for Handler {
         let channel = msg.channel_id.to_channel(&ctx).await.unwrap();
         match channel {
             Channel::Guild(channel) => {
-                if channel.name != "omnitea" {
+                /*if channel.name != "omnitea" {
                     return;
-                }
+                }*/
             }
             Channel::Private(_) => {}
             _ => return,

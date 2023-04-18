@@ -1,5 +1,8 @@
 FROM rust:latest AS builder
 
+ARG PROMPT_FILE_VAR
+ENV PROMPT_FILE=$PROMPT_FILE_VAR
+
 WORKDIR /usr/src
 
 # Create blank project

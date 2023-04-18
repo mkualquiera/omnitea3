@@ -196,7 +196,7 @@ async fn add_message(ctx: Context, chat_log: ChatLog, message: &Message) -> Chat
 async fn build_chat_log(ctx: Context, messages: Vec<Message>) -> ChatLog {
     let mut chat_log = ChatLog::new();
 
-    let prompt = include_str!("prompt.txt");
+    let prompt = include_str!(env!("PROMPT_FILE"));
 
     for (i, message) in messages.clone().into_iter().enumerate() {
         // See if this is the fourth to last message, or if there are less than 4 messages

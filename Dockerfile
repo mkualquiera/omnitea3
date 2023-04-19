@@ -19,6 +19,10 @@ RUN rm -rf target/release/deps/omnitea3*
 # Now copy in the rest of the sources
 COPY src /usr/src/omnitea3/src/
 
+
+ARG PROMPT_FILE_VAR
+ENV PROMPT_FILE=$PROMPT_FILE_VAR
+
 # This is the actual build.
 RUN cargo build --release 
 

@@ -272,6 +272,11 @@ async fn fetch_included_messages(ctx: Context, msg: Message) -> Vec<Message> {
                 found_barrier = true;
                 break;
             }
+            // See if the message is an aside
+            if message.content.starts_with("|a|") {
+                debug!("Aside found, skipping");
+                continue;
+            }
             messages_to_include.insert(0, message.clone());
         }
 
@@ -338,6 +343,11 @@ impl EventHandler for Handler {
             if let Err(why) = msg.react(&ctx.http, '✅').await {
                 error!("Error reacting: {:?}", why);
             }
+            return;
+        }
+        // See if the message received is an aside, and ignore it if so
+        if msg.content.starts_with("|a|") {
+            info!("Aside received");
             return;
         }
 

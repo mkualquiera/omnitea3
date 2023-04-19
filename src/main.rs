@@ -267,7 +267,7 @@ async fn fetch_included_messages(ctx: Context, msg: Message) -> Vec<Message> {
         // Add them at the start of the vector
         for message in past_messages {
             // See if the message is a barrier
-            if message.content == "|b|" {
+            if message.content.starts_with("|b|") {
                 debug!("Barrier found, stopping");
                 found_barrier = true;
                 break;
@@ -336,7 +336,7 @@ impl EventHandler for Handler {
 
         info!("Received message: {}", msg.content);
         // See if the message is a barrier
-        if msg.content == "|b|" {
+        if msg.content.starts_with("|b|") {
             info!("Barrier received");
 
             // React with a checkmark
@@ -348,6 +348,11 @@ impl EventHandler for Handler {
         // See if the message received is an aside, and ignore it if so
         if msg.content.starts_with("|a|") {
             info!("Aside received");
+
+            // React with a silent checkmark
+            if let Err(why) = msg.react(&ctx.http, '🔇').await {
+                error!("Error reacting: {:?}", why);
+            }
             return;
         }
 

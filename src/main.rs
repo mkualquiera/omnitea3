@@ -181,7 +181,31 @@ async fn add_user_message(
         None => message.author.name.clone(),
     };
 
-    chat_log.user(&format!("{} says: {}", user_nickname, message.content))
+    let mut content = message.content.clone();
+
+    // Check if the message has a file attached, and add them to the content
+    if !message.attachments.is_empty() {
+        let attachments = message
+            .attachments
+            .iter()
+            .map(|a| a.url.clone())
+            .collect::<Vec<String>>();
+
+        for attachment in attachments {
+            let attachment_string = reqwest::get(&attachment)
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap();
+
+            let filename = attachment.split('/').last().unwrap();
+
+            content.push_str(&format!("File {}: \n{}", filename, attachment_string));
+        }
+    }
+
+    chat_log.user(&format!("{} says: {}", user_nickname, content))
 }
 
 async fn add_message(ctx: Context, chat_log: ChatLog, message: &Message) -> ChatLog {

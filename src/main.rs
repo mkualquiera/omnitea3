@@ -201,11 +201,11 @@ async fn add_user_message(
 
             let filename = attachment.split('/').last().unwrap();
 
-            content.push_str(&format!("File {}: \n{}", filename, attachment_string));
+            content.push_str(&format!("File {filename}: \n{attachment_string}"));
         }
     }
 
-    chat_log.user(&format!("{} says: {}", user_nickname, content))
+    chat_log.user(&format!("{user_nickname} says: {content}"))
 }
 
 async fn add_message(ctx: Context, chat_log: ChatLog, message: &Message) -> ChatLog {
@@ -225,16 +225,16 @@ async fn build_chat_log(
     let mut chat_log = ChatLog::new();
 
     let prompt = if let Some(user_prompt) = prompt {
-        &user_prompt
+        user_prompt
     } else {
-        include_str!(env!("PROMPT_FILE"))
+        include_str!(env!("PROMPT_FILE")).to_owned()
     };
 
     for (i, message) in messages.clone().into_iter().enumerate() {
         // See if this is the fourth to last message, or if there are less than 4 messages
         if i == messages.len() - 4 || messages.len() < 4 {
             // If it is, we need to add the user message
-            chat_log = chat_log.system(prompt);
+            chat_log = chat_log.system(&prompt);
         }
         chat_log = add_message(ctx.clone(), chat_log, &message).await;
     }

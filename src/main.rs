@@ -217,10 +217,18 @@ async fn add_message(ctx: Context, chat_log: ChatLog, message: &Message) -> Chat
     }
 }
 
-async fn build_chat_log(ctx: Context, messages: Vec<Message>) -> ChatLog {
+async fn build_chat_log(
+    ctx: Context,
+    messages: Vec<Message>,
+    prompt: Option<String>,
+) -> ChatLog {
     let mut chat_log = ChatLog::new();
 
-    let prompt = include_str!(env!("PROMPT_FILE"));
+    let prompt = if let Some(user_prompt) = prompt {
+        &user_prompt
+    } else {
+        include_str!(env!("PROMPT_FILE"))
+    };
 
     for (i, message) in messages.clone().into_iter().enumerate() {
         // See if this is the fourth to last message, or if there are less than 4 messages
@@ -266,9 +274,11 @@ async fn send_message(
     }
 }
 
-async fn fetch_included_messages(ctx: Context, msg: Message) -> Vec<Message> {
+async fn fetch_included_messages(ctx: Context, msg: Message) -> ChatLog {
     let mut messages_to_include = Vec::new();
     messages_to_include.push(msg.clone());
+
+    let mut user_prompt = None;
 
     // Add past messages until we go over the limit
     loop {
@@ -294,6 +304,10 @@ async fn fetch_included_messages(ctx: Context, msg: Message) -> Vec<Message> {
             if message.content.starts_with("|b|") {
                 debug!("Barrier found, stopping");
                 found_barrier = true;
+
+                // Get the rest of the text for the user prompt
+                user_prompt = Some(message.content[3..].to_string());
+
                 break;
             }
             // See if the message is an aside
@@ -305,7 +319,12 @@ async fn fetch_included_messages(ctx: Context, msg: Message) -> Vec<Message> {
         }
 
         // Count the number of tokens in the chat log
-        let chat_log = build_chat_log(ctx.clone(), messages_to_include.clone()).await;
+        let chat_log = build_chat_log(
+            ctx.clone(),
+            messages_to_include.clone(),
+            user_prompt.clone(),
+        )
+        .await;
 
         let tokens = chat_log.count_tokens();
         if tokens > MAX_TOKENS || found_barrier {
@@ -315,7 +334,12 @@ async fn fetch_included_messages(ctx: Context, msg: Message) -> Vec<Message> {
 
     // Remove messages until we are under the limit
     while messages_to_include.len() > 1 {
-        let chat_log = build_chat_log(ctx.clone(), messages_to_include.clone()).await;
+        let chat_log = build_chat_log(
+            ctx.clone(),
+            messages_to_include.clone(),
+            user_prompt.clone(),
+        )
+        .await;
 
         let tokens = chat_log.count_tokens();
         if tokens <= MAX_TOKENS {
@@ -325,7 +349,7 @@ async fn fetch_included_messages(ctx: Context, msg: Message) -> Vec<Message> {
         messages_to_include.remove(0);
     }
 
-    messages_to_include
+    build_chat_log(ctx, messages_to_include, user_prompt).await
 }
 
 #[async_trait]
@@ -381,11 +405,7 @@ impl EventHandler for Handler {
         }
 
         // Get the messages to include
-        let messages_to_include =
-            fetch_included_messages(ctx.clone(), msg.clone()).await;
-
-        // Make the completion request
-        let chat_log = build_chat_log(ctx.clone(), messages_to_include.clone()).await;
+        let chat_log = fetch_included_messages(ctx.clone(), msg.clone()).await;
 
         debug!("Chat log: {:?}", chat_log);
         info!("Context length: {}", chat_log.count_tokens());

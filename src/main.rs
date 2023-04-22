@@ -306,7 +306,11 @@ async fn fetch_included_messages(ctx: Context, msg: Message) -> ChatLog {
                 found_barrier = true;
 
                 // Get the rest of the text for the user prompt
-                user_prompt = Some(message.content[3..].to_string());
+                let remainder = message.content[3..].trim();
+
+                if !remainder.is_empty() {
+                    user_prompt = Some(remainder.to_string());
+                }
 
                 break;
             }

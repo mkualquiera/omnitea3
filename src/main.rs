@@ -326,8 +326,9 @@ async fn fetch_included_messages(ctx: Context, msg: Message) -> ChatLog {
 
                 break;
             }
-            // See if the message is an aside
-            if message.content.starts_with("|a|") {
+            // See if the message is an aside or a continue
+            if message.content.starts_with("|a|") || message.content.starts_with("|c|")
+            {
                 debug!("Aside found, skipping");
                 continue;
             }
@@ -418,6 +419,16 @@ impl EventHandler for Handler {
                 error!("Error reacting: {:?}", why);
             }
             return;
+        }
+        // See if the message received is a continue, and ignore it if so,
+        // but don't return
+        if msg.content.starts_with("|c|") {
+            info!("Continue received");
+
+            // React with a fast forward emoji
+            if let Err(why) = msg.react(&ctx.http, '⏩').await {
+                error!("Error reacting: {:?}", why);
+            }
         }
 
         // Get the messages to include

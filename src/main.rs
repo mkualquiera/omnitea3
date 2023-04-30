@@ -288,7 +288,11 @@ async fn send_message(
 
 async fn fetch_included_messages(ctx: Context, msg: Message) -> ChatLog {
     let mut messages_to_include = Vec::new();
-    messages_to_include.push(msg.clone());
+
+    // Include only if it's not a |c|
+    if !msg.content.starts_with("|c|") {
+        messages_to_include.push(msg.clone());
+    }
 
     let mut user_prompt = None;
 

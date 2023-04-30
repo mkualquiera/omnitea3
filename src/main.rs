@@ -6,7 +6,7 @@ use std::path::Path;
 
 mod openai;
 
-use openai::{ChatLog, OpenAI};
+use openai::{ChatLog, ChatRole, OpenAI};
 
 use serenity::async_trait;
 use serenity::model::channel::Message;
@@ -211,7 +211,19 @@ async fn add_user_message(
 async fn add_message(ctx: Context, chat_log: ChatLog, message: &Message) -> ChatLog {
     // we need to check if the id of the author is the same as the id of the bot
     if message.is_own(&ctx.cache) {
-        chat_log.assistant(&message.content)
+        // if the last message was from the bot, we can append the content to that
+        let last_message = chat_log.0.last().unwrap();
+        if last_message.role == ChatRole::Assistant {
+            let mut chat_log = chat_log.clone();
+            chat_log.pop();
+            chat_log.assistant(&format!(
+                "{last_message}{message}",
+                last_message = last_message.content,
+                message = message.content
+            ))
+        } else {
+            chat_log.assistant(&message.content)
+        }
     } else {
         add_user_message(ctx, chat_log, message).await
     }

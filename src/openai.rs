@@ -79,8 +79,8 @@ impl From<ChatLog> for ChatCompletionRequest {
 }
 
 /// A chat log, which is a list of chat entries
-#[derive(Serialize, Deserialize)]
-pub struct ChatLog(Vec<ChatEntry>);
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ChatLog(pub Vec<ChatEntry>);
 
 impl core::fmt::Debug for ChatEntry {
     /// Debug implementation for chat entry
@@ -189,6 +189,11 @@ impl ChatLog {
     /// Count the number of tokens in the chat log
     pub fn count_tokens(&self) -> usize {
         self.0.iter().map(ChatEntry::count_tokens).sum()
+    }
+
+    /// Pop the last entry from the chat log, removing it
+    pub fn pop(&mut self) -> Option<ChatEntry> {
+        self.0.pop()
     }
 }
 

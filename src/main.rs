@@ -304,6 +304,15 @@ async fn send_message(
     let mut pos = 0;
     loop {
         let this_char = chars[pos];
+        // see if chars[pos] chars[pos+1] chars[pos+2] is ```
+        if this_char == '`'
+            && pos + 2 < chars.len()
+            && chars[pos + 1] == '`'
+            && chars[pos + 2] == '`'
+        {
+            // We are in a code block
+            code_block_mode = !code_block_mode;
+        }
         pos += 1;
         buffer.push(this_char);
         let separator = if code_block_mode { '\n' } else { ' ' };
@@ -325,9 +334,6 @@ async fn send_message(
                     buffer.push_str("```");
                 }
             }
-        }
-        if chars[pos] == '`' && chars[pos + 1] == '`' && chars[pos + 2] == '`' {
-            code_block_mode = !code_block_mode;
         }
         if pos >= chars.len() {
             break;

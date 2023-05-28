@@ -347,11 +347,7 @@ async fn send_message(
     let chunks = chunks.chunks(2000 - 6);
     for chunk in chunks {
         let chunk = chunk.iter().collect::<String>();
-        let chunk = if escape {
-            format!("```{chunk}```")
-        } else {
-            chunk
-        };
+        let chunk = if escape { format!("{chunk}```") } else { chunk };
         if let Err(why) = original_message.channel_id.say(&ctx.http, chunk).await {
             error!("Error sending message: {:?}", why);
         }

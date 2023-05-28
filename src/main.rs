@@ -311,6 +311,9 @@ async fn send_message(
             && chars[pos + 2] == '`'
         {
             // We are in a code block
+            if escape {
+                buffer.push_str("```");
+            }
             code_block_mode = !code_block_mode;
         }
         pos += 1;

@@ -261,6 +261,7 @@ async fn send_message(
     message: String,
     escape: bool,
 ) {
+    /*
     // Split the message into multiple messages if it is too long
     let chars = message.as_str().chars().collect::<Vec<char>>();
     // Do chunks of 2000 - 6 to account for the code block
@@ -280,6 +281,68 @@ async fn send_message(
         };
 
         // Send the message
+        if let Err(why) = original_message.channel_id.say(&ctx.http, chunk).await {
+            error!("Error sending message: {:?}", why);
+        }
+    }*/
+    let mut code_block_mode = false;
+    let mut buffer = String::new();
+    if escape {
+        buffer.push_str("```");
+    }
+    let chars = message.as_str().chars().collect::<Vec<char>>();
+    // Given the current position in chars, how much further would we have to go
+    // before hitting separator?
+    let peek_separator = |pos: usize, separator: char| {
+        for i in pos..chars.len() {
+            if chars[i] == separator {
+                return i - pos;
+            }
+        }
+        return chars.len() - pos;
+    };
+    let mut pos = 0;
+    loop {
+        let this_char = chars[pos];
+        pos += 1;
+        buffer.push(this_char);
+        let separator = if code_block_mode { '\n' } else { ' ' };
+        if this_char == separator || pos == chars.len() {
+            let peeked = peek_separator(pos, separator);
+            let offset = if escape { 3 } else { 0 };
+            if buffer.len() + peeked + offset > 2000 {
+                if escape || code_block_mode {
+                    buffer.push_str("```");
+                }
+                // Send the buffer
+                if let Err(why) =
+                    original_message.channel_id.say(&ctx.http, buffer).await
+                {
+                    error!("Error sending message: {:?}", why);
+                }
+                buffer = String::new();
+                if escape || code_block_mode {
+                    buffer.push_str("```");
+                }
+            }
+        }
+        if chars[pos] == '`' && chars[pos + 1] == '`' && chars[pos + 2] == '`' {
+            code_block_mode = !code_block_mode;
+        }
+        if pos >= chars.len() {
+            break;
+        }
+    }
+    // If we still have stuff in the buffer, send it chunked like we used to
+    let chunks = buffer.chars().collect::<Vec<char>>();
+    let chunks = chunks.chunks(2000 - 6);
+    for chunk in chunks {
+        let chunk = chunk.iter().collect::<String>();
+        let chunk = if escape {
+            format!("```{chunk}```")
+        } else {
+            chunk
+        };
         if let Err(why) = original_message.channel_id.say(&ctx.http, chunk).await {
             error!("Error sending message: {:?}", why);
         }
